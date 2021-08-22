@@ -12,6 +12,7 @@
 #define MUDUO_NET_PROTORPC_RPCSERVER_H
 
 #include "muduo/net/TcpServer.h"
+#include "muduo/net/protorpc/RpcCodec.h"
 
 namespace google {
 namespace protobuf {
@@ -41,14 +42,28 @@ class RpcServer
   void start();
 
  private:
+    struct doneCallbackArgs
+    {
+        doneCallbackArgs(::google::protobuf::Message* r,
+                         int64_t i, const TcpConnectionPtr c)
+        : response(r), id(i), conn(c) {}
+
+        ::google::protobuf::Message* response;
+        int64_t id;
+        const TcpConnectionPtr conn;
+    };
+
   void onConnection(const TcpConnectionPtr& conn);
 
-  // void onMessage(const TcpConnectionPtr& conn,
-  //                Buffer* buf,
-  //                Timestamp time);
+  void onRpcMessage(const TcpConnectionPtr& conn,
+                    const RpcMessagePtr& messagePtr,
+                    Timestamp receiveTime);
+
+  void doneCallback(const doneCallbackArgs args);
 
   TcpServer server_;
   std::map<std::string, ::google::protobuf::Service*> services_;
+  RpcCodec codec_;
 };
 
 }  // namespace net

@@ -93,18 +93,11 @@ class RpcChannel : public ::google::protobuf::RpcChannel
  public:
   RpcChannel();
 
-  explicit RpcChannel(const TcpConnectionPtr& conn);
-
   ~RpcChannel() override;
 
   void setConnection(const TcpConnectionPtr& conn)
   {
     conn_ = conn;
-  }
-
-  void setServices(const std::map<std::string, ::google::protobuf::Service*>* services)
-  {
-    services_ = services;
   }
 
   // Call the given method of the remote service.  The signature of this
@@ -127,8 +120,6 @@ class RpcChannel : public ::google::protobuf::RpcChannel
                     const RpcMessagePtr& messagePtr,
                     Timestamp receiveTime);
 
-  void doneCallback(::google::protobuf::Message* response, int64_t id);
-
   struct OutstandingCall
   {
     ::google::protobuf::Message* response;
@@ -141,8 +132,6 @@ class RpcChannel : public ::google::protobuf::RpcChannel
 
   MutexLock mutex_;
   std::map<int64_t, OutstandingCall> outstandings_ GUARDED_BY(mutex_);
-
-  const std::map<std::string, ::google::protobuf::Service*>* services_;
 };
 typedef std::shared_ptr<RpcChannel> RpcChannelPtr;
 
