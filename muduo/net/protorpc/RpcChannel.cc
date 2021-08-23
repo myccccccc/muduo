@@ -16,10 +16,14 @@
 using namespace muduo;
 using namespace muduo::net;
 
-RpcChannel::RpcChannel()
-  : codec_(std::bind(&RpcChannel::onRpcMessage, this, _1, _2, _3))
+RpcChannel::RpcChannel(EventLoop* loop, const InetAddress& serverAddr)
+  : codec_(std::bind(&RpcChannel::onRpcMessage, this, _1, _2, _3)),
+    client_(loop, serverAddr, "RpcChannel"),
+    cond_(mutex_)
 {
   LOG_INFO << "RpcChannel::ctor - " << this;
+  client_.setMessageCallback(
+          std::bind(&RpcCodec ::onMessage, &codec_, _1, _2, _3));
 }
 
 
@@ -45,6 +49,11 @@ void RpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor* method,
                             ::google::protobuf::Message* response,
                             ::google::protobuf::Closure* done)
 {
+  TcpConnectionPtr conn = client_.connection();
+  if (conn == NULL)
+  {
+      conn = connect();
+  }
   RpcMessage message;
   message.set_type(REQUEST);
   int64_t id = id_.incrementAndGet();
@@ -58,21 +67,14 @@ void RpcChannel::CallMethod(const ::google::protobuf::MethodDescriptor* method,
   MutexLockGuard lock(mutex_);
   outstandings_[id] = out;
   }
-  codec_.send(conn_, message);
-}
-
-void RpcChannel::onMessage(const TcpConnectionPtr& conn,
-                           Buffer* buf,
-                           Timestamp receiveTime)
-{
-  codec_.onMessage(conn, buf, receiveTime);
+  codec_.send(conn, message);
 }
 
 void RpcChannel::onRpcMessage(const TcpConnectionPtr& conn,
                               const RpcMessagePtr& messagePtr,
                               Timestamp receiveTime)
 {
-  assert(conn == conn_);
+  assert(conn == client_.connection());
   //printf("%s\n", message.DebugString().c_str());
   RpcMessage& message = *messagePtr;
   if (message.type() == RESPONSE)
@@ -111,6 +113,41 @@ void RpcChannel::onRpcMessage(const TcpConnectionPtr& conn,
   else if (message.type() == ERROR)
   {
   }
+}
+
+void RpcChannel::onConnection(const std::weak_ptr<RpcChannel>& wkChannel, const TcpConnectionPtr& conn)
+{
+    LOG_INFO << "RpcChannel - " << conn->localAddress().toIpPort() << " -> "
+    << conn->peerAddress().toIpPort() << " is "
+    << (conn->connected() ? "UP" : "DOWN");
+
+    if (conn->connected())
+    {
+        RpcChannelPtr channel(wkChannel.lock());
+        if (channel)
+        {
+            MutexLockGuard lock(channel->mutex_);
+            channel->cond_.notifyAll();
+        }
+    }
+    else
+    {
+    }
+}
+
+TcpConnectionPtr RpcChannel::connect()
+{
+    MutexLockGuard lock(mutex_);
+    TcpConnectionPtr conn = client_.connection();
+    client_.setConnectionCallback(
+            std::bind(&RpcChannel::onConnection, std::weak_ptr<RpcChannel>(shared_from_this()), _1));
+    while (conn == NULL)
+    {
+        client_.connect();
+        cond_.wait();
+        conn = client_.connection();
+    }
+    return conn;
 }
 
 

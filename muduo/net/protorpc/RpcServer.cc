@@ -23,7 +23,7 @@ RpcServer::RpcServer(EventLoop* loop,
     codec_(std::bind(&RpcServer::onRpcMessage, this, _1, _2, _3))
 {
   server_.setConnectionCallback(
-      std::bind(&RpcServer::onConnection, this, _1));
+      std::bind(&RpcServer::onConnection, _1));
   server_.setMessageCallback(
           std::bind(&RpcCodec::onMessage, &codec_, _1, _2, _3));
 }

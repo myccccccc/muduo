@@ -13,7 +13,10 @@
 
 #include "muduo/base/Atomic.h"
 #include "muduo/base/Mutex.h"
+#include "muduo/base/Condition.h"
 #include "muduo/net/protorpc/RpcCodec.h"
+#include "muduo/net/TcpClient.h"
+#include "muduo/net/EventLoop.h"
 
 #include <google/protobuf/service.h>
 
@@ -84,21 +87,18 @@ namespace net
 // methods.  The Service may be running on another machine.  Normally, you
 // should not call an RpcChannel directly, but instead construct a stub Service
 // wrapping it.  Example:
-// FIXME: update here
 //   RpcChannel* channel = new MyRpcChannel("remotehost.example.com:1234");
 //   MyService* service = new MyService::Stub(channel);
 //   service->MyMethod(request, &response, callback);
-class RpcChannel : public ::google::protobuf::RpcChannel
+class RpcChannel : public ::google::protobuf::RpcChannel,
+                   public std::enable_shared_from_this<RpcChannel>
+
 {
  public:
-  RpcChannel();
+  RpcChannel() = delete;
+  RpcChannel(EventLoop* loop, const InetAddress& serverAddr);
 
   ~RpcChannel() override;
-
-  void setConnection(const TcpConnectionPtr& conn)
-  {
-    conn_ = conn;
-  }
 
   // Call the given method of the remote service.  The signature of this
   // procedure looks the same as Service::CallMethod(), but the requirements
@@ -111,14 +111,14 @@ class RpcChannel : public ::google::protobuf::RpcChannel
                   ::google::protobuf::Message* response,
                   ::google::protobuf::Closure* done) override;
 
-  void onMessage(const TcpConnectionPtr& conn,
-                 Buffer* buf,
-                 Timestamp receiveTime);
-
  private:
+  TcpConnectionPtr connect();
+
   void onRpcMessage(const TcpConnectionPtr& conn,
                     const RpcMessagePtr& messagePtr,
                     Timestamp receiveTime);
+
+  static void onConnection(const std::weak_ptr<RpcChannel>& wkChannel, const TcpConnectionPtr& conn);
 
   struct OutstandingCall
   {
@@ -127,10 +127,11 @@ class RpcChannel : public ::google::protobuf::RpcChannel
   };
 
   RpcCodec codec_;
-  TcpConnectionPtr conn_;
   AtomicInt64 id_;
-
+  TcpClient client_;
   MutexLock mutex_;
+  Condition cond_;
+
   std::map<int64_t, OutstandingCall> outstandings_ GUARDED_BY(mutex_);
 };
 typedef std::shared_ptr<RpcChannel> RpcChannelPtr;
