@@ -24,6 +24,8 @@ RpcChannel::RpcChannel(EventLoop* loop, const InetAddress& serverAddr)
   LOG_INFO << "RpcChannel::ctor - " << this;
   client_.setMessageCallback(
           std::bind(&RpcCodec ::onMessage, &codec_, _1, _2, _3));
+  client_.setConnectionCallback(
+          std::bind(&RpcChannel::onConnection, this, _1));
 }
 
 
@@ -115,7 +117,7 @@ void RpcChannel::onRpcMessage(const TcpConnectionPtr& conn,
   }
 }
 
-void RpcChannel::onConnection(const std::weak_ptr<RpcChannel>& wkChannel, const TcpConnectionPtr& conn)
+void RpcChannel::onConnection(const TcpConnectionPtr& conn)
 {
     LOG_INFO << "RpcChannel - " << conn->localAddress().toIpPort() << " -> "
     << conn->peerAddress().toIpPort() << " is "
@@ -123,12 +125,8 @@ void RpcChannel::onConnection(const std::weak_ptr<RpcChannel>& wkChannel, const 
 
     if (conn->connected())
     {
-        RpcChannelPtr channel(wkChannel.lock());
-        if (channel)
-        {
-            MutexLockGuard lock(channel->mutex_);
-            channel->cond_.notifyAll();
-        }
+        MutexLockGuard lock(mutex_);
+        cond_.notifyAll();
     }
     else
     {
@@ -139,8 +137,6 @@ TcpConnectionPtr RpcChannel::connect()
 {
     MutexLockGuard lock(mutex_);
     TcpConnectionPtr conn = client_.connection();
-    client_.setConnectionCallback(
-            std::bind(&RpcChannel::onConnection, std::weak_ptr<RpcChannel>(shared_from_this()), _1));
     while (conn == NULL)
     {
         client_.connect();

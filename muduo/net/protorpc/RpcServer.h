@@ -53,7 +53,7 @@ class RpcServer
         const TcpConnectionPtr conn;
     };
 
-  static void onConnection(const TcpConnectionPtr& conn);
+  void onConnection(const TcpConnectionPtr& conn);
 
   void onRpcMessage(const TcpConnectionPtr& conn,
                     const RpcMessagePtr& messagePtr,
