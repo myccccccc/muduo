@@ -98,11 +98,8 @@ class RpcChannel : public ::google::protobuf::RpcChannel
 
   ~RpcChannel() override;
 
-  // Call the given method of the remote service.  The signature of this
-  // procedure looks the same as Service::CallMethod(), but the requirements
-  // are less strict in one important way:  the request and response objects
-  // need not be of any specific class as long as their descriptors are
-  // method->input_type() and method->output_type().
+  // RpcChannel only support async RPC call (done != nullptr) now
+  // FIXME support sync RPC call (done == nullptr)
   void CallMethod(const ::google::protobuf::MethodDescriptor* method,
                   ::google::protobuf::RpcController* controller,
                   const ::google::protobuf::Message* request,
@@ -110,7 +107,7 @@ class RpcChannel : public ::google::protobuf::RpcChannel
                   ::google::protobuf::Closure* done) override;
 
  private:
-  TcpConnectionPtr connect();
+  TcpConnectionPtr connect(); // FIXME make this func async
 
   void onRpcMessage(const TcpConnectionPtr& conn,
                     const RpcMessagePtr& messagePtr,
